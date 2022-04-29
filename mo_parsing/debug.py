@@ -83,7 +83,7 @@ def match(expr, start, end, string, tokens):
 
 def fail(expr, start, string, cause):
     quoted = plain_quote(text(cause))
-    print("  Except  " + quoted)
+    print(f"  Except  {quoted}")
 
 
 def quote(value, start=0, length=12):

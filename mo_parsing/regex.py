@@ -69,10 +69,7 @@ def to_bracket(tokens):
             acc.extend(e.parser_config.include)
         else:
             Log.error("programmer error")
-    if tokens["negate"]:
-        return Char(exclude=acc)
-    else:
-        return Char(acc)
+    return Char(exclude=acc) if tokens["negate"] else Char(acc)
 
 
 num_captures = 0
@@ -135,8 +132,11 @@ PLAIN_ENGINE.use()
 
 any_whitechar = Literal("\\s").addParseAction(lambda: Char(whitespace))
 not_whitechar = Literal("\\S").addParseAction(lambda: Char(exclude=whitespace))
-any_wordchar = Literal("\\w").addParseAction(lambda: Char(alphanums + "_"))
-not_wordchar = Literal("\\W").addParseAction(lambda: Char(exclude=alphanums + "_"))
+any_wordchar = Literal("\\w").addParseAction(lambda: Char(f"{alphanums}_"))
+not_wordchar = Literal("\\W").addParseAction(
+    lambda: Char(exclude=f"{alphanums}_")
+)
+
 any_digitchar = Literal("\\d").addParseAction(lambda: Char(nums))
 not_digitchar = Literal("\\D").addParseAction(lambda: Char(exclude=nums))
 bs_char = Literal("\\\\").addParseAction(lambda: Literal("\\"))
@@ -211,24 +211,36 @@ repetition = Group(
 
 LB = Char("(")
 
-ahead = ("(?=" + regex + ")").addParseAction(lambda t: FollowedBy(t["value"]))
-not_ahead = ("(?!" + regex + ")").addParseAction(lambda t: NotAny(t["value"]))
-behind = ("(?<=" + regex + ")").addParseAction(lambda t: Log.error("not supported"))
-not_behind = ("(?<!" + regex + ")").addParseAction(lambda t: Log.error("not supported"))
-non_capture = ("(?:" + regex + ")").addParseAction(lambda t: t["value"])
+ahead = f"(?={regex})".addParseAction(lambda t: FollowedBy(t["value"]))
+not_ahead = f"(?!{regex})".addParseAction(lambda t: NotAny(t["value"]))
+behind = f"(?<={regex})".addParseAction(lambda t: Log.error("not supported"))
+not_behind = f"(?<!{regex})".addParseAction(
+    lambda t: Log.error("not supported")
+)
+
+non_capture = f"(?:{regex})".addParseAction(lambda t: t["value"])
 
 
 named = (
     (
-        Literal("(?P<").addParseAction(INC)
-        + Word(alphanums + "_")("name")
-        + ">"
-        + regex
-        + ")"
+        (
+            (
+                (
+                    (
+                        Literal("(?P<").addParseAction(INC)
+                        + Word(f"{alphanums}_")("name")
+                    )
+                    + ">"
+                )
+                + regex
+            )
+            + ")"
+        )
     )
     .addParseAction(name_token)
     .addParseAction(DEC)
 )
+
 group = (
     (LB.addParseAction(INC) + regex + ")")
     .addParseAction(name_token)
@@ -312,8 +324,7 @@ class Regex(ParseEnhancement):
                 pe = e
                 ii = chr(i + ord("0"))
                 ann.append(Annotation(ii, s + start, e + start, [g]))
-                n = lookup.get(i)
-                if n:
+                if n := lookup.get(i):
                     ann.append(Annotation(n, s + start, e + start, [g]))
             return ParseResults(_plain_group, start, end, ann)
 
@@ -337,8 +348,7 @@ class Regex(ParseEnhancement):
             return self.addParseAction(pf)
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.regex.match(string, start)
-        if found:
+        if found := self.regex.match(string, start):
             return ParseResults(self, start, found.end(), [found[0]])
         else:
             raise ParseException(self, start, string)
@@ -364,10 +374,7 @@ class Regex(ParseEnhancement):
         return self.expr.min_length()
 
     def __regex__(self):
-        if self.regex:
-            return "|", self.regex.pattern
-        else:
-            return self.expr.__regex__()
+        return ("|", self.regex.pattern) if self.regex else self.expr.__regex__()
 
 
 _plain_group = Group(None)

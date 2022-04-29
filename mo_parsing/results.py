@@ -49,8 +49,7 @@ class ParseResults(object):
                         yield tok
                     else:
                         for t in tok.tokens:
-                            for tt in _flatten(t):
-                                yield tt
+                            yield from _flatten(t)
                     continue
                 elif tok.name:
                     continue
@@ -58,8 +57,7 @@ class ParseResults(object):
                     continue
                 elif is_forward(tok.type) and isinstance(tok.tokens[0].type, Group):
                     continue
-                for f in tok._get_item_by_name(name):
-                    yield f
+                yield from tok._get_item_by_name(name)
 
     def __getitem__(self, item):
         if is_forward(self.type):
@@ -67,7 +65,7 @@ class ParseResults(object):
 
         if is_text(item):
             values = list(self._get_item_by_name(item))
-            if len(values) == 0:
+            if not values:
                 return NO_RESULTS
             if len(values) == 1:
                 return values[0]
@@ -177,24 +175,14 @@ class ParseResults(object):
             if len(self.tokens) != 1:
                 Log.error("not expected")
 
-            output = list(self.tokens[0])
-            for i in output:
-                yield i
+            yield from list(self.tokens[0])
             return
 
         for r in self.tokens:
             if isinstance(r, Annotation):
                 continue
             elif isinstance(r, ParseResults):
-                if isinstance(r, Annotation):
-                    return
-                elif isinstance(r.type, Group):
-                    yield r
-                elif is_forward(r.type) and isinstance(forward_type(r), Group):
-                    yield r
-                elif not isinstance(r.type, Group):
-                    for mm in r:
-                        yield mm
+                yield from r
             else:
                 yield r
 
@@ -203,9 +191,8 @@ class ParseResults(object):
             if isinstance(t.type, (Group, Token)):
                 if index < 1:
                     del self.tokens[i]
-                    name = t.name
-                    if name:
-                        if not isinstance(t.type, Annotation):
+                    if not isinstance(t.type, Annotation):
+                        if name := t.name:
                             self.tokens.append(Annotation(
                                 name, t.start, t.end, t.tokens
                             ))
@@ -267,8 +254,7 @@ class ParseResults(object):
 
     def items(self):
         if is_forward(self.type):
-            for k, v in self.tokens[0].items():
-                yield k, v
+            yield from self.tokens[0].items()
             return
 
         output = {}
@@ -283,8 +269,7 @@ class ParseResults(object):
                     continue
                 for k, v in tok.items():
                     add(output, k, v)
-        for k, v in output.items():
-            yield k, v
+        yield from output.items()
 
     def haskeys(self):
         """Since keys() returns an iterator, this method is helpful in bypassing
@@ -304,7 +289,7 @@ class ParseResults(object):
         """
         ret = self[index]
         del self[index]
-        return ret if ret else default
+        return ret or default
 
     def get(self, key, defaultValue=None):
         """
@@ -313,15 +298,10 @@ class ParseResults(object):
 
         Similar to ``dict.get()``.
         """
-        if key in self:
-            return self[key]
-        else:
-            return defaultValue
+        return self[key] if key in self else defaultValue
 
     def __contains__(self, item):
-        if item is Ellipsis:
-            return False
-        return bool(self[item])
+        return False if item is Ellipsis else bool(self[item])
 
     def __add__(self, other):
         # if not isinstance(other, ParseResults):
@@ -365,8 +345,7 @@ class ParseResults(object):
     def _asStringList(self):
         for t in self:
             if isinstance(t, ParseResults):
-                for s in t._asStringList():
-                    yield s
+                yield from t._asStringList()
             else:
                 yield t
 
@@ -401,10 +380,7 @@ class ParseResults(object):
                 for t in obj.tokens:
                     inner = internal(t, depth + 1)
                     output.extend(inner)
-                if isinstance(obj.type, Group):
-                    return [output]
-                else:
-                    return output
+                return [output] if isinstance(obj.type, Group) else output
             else:
                 return [obj]
 
@@ -418,8 +394,7 @@ class ParseResults(object):
         """
         Returns a new copy of a `ParseResults` object.
         """
-        ret = ParseResults(self.type, self.start, self.end, list(self.tokens))
-        return ret
+        return ParseResults(self.type, self.start, self.end, list(self.tokens))
 
     def getName(self):
         r"""
@@ -468,16 +443,15 @@ def _flatten(token):
     """
     FLATTEN SOME, LEAVING ANY IMPORTANT FEATURES (names or groups)
     """
-    if not isinstance(token, ParseResults):
-        yield token
-    elif isinstance(token.type, Group):
-        yield token
-    elif token.name:
+    if (
+        not isinstance(token, ParseResults)
+        or isinstance(token.type, Group)
+        or token.name
+    ):
         yield token
     else:
         for t in token.tokens:
-            for tt in _flatten(t):
-                yield tt
+            yield from _flatten(t)
 
 
 def add(obj, key, value):
@@ -509,7 +483,7 @@ class Annotation(ParseResults):
         return "{" + text(self.name) + ": " + text(self.tokens) + "}"
 
     def __repr__(self):
-        return "Annotation(" + repr(self.name) + ", " + repr(self.tokens) + ")"
+        return f"Annotation({repr(self.name)}, {repr(self.tokens)})"
 
 
 MutableMapping.register(ParseResults)

@@ -17,7 +17,7 @@ CURRENT = None
 class Engine:
     def __init__(self, white=" \n\r\t"):
         self.literal = Literal
-        self.keyword_chars = alphanums + "_$"
+        self.keyword_chars = f"{alphanums}_$"
         self.ignore_list = []
         self.debugActions = DebugActions(noop, noop, noop)
         self.all_exceptions = {}
@@ -65,7 +65,7 @@ class Engine:
         self.__exit__(None, None, None)
 
     def normalize(self, expr):
-        if expr == None:
+        if expr is None:
             return None
         if is_text(expr):
             if issubclass(self.literal, Token):
@@ -129,8 +129,7 @@ class Engine:
                 return start
 
         end = start  # TO AVOID RECURSIVE LOOP
-        found = self.regex.match(string, start)
-        if found:
+        if found := self.regex.match(string, start):
             end = found.end()
         self.skips[start] = end  # THE REAL VALUE
         return end
@@ -138,11 +137,7 @@ class Engine:
     def __regex__(self):
         white = regex_range(self.white_chars)
         if not self.ignore_list:
-            if not white:
-                return "*", ""
-            else:
-                return "*", white + "*"
-
+            return ("*", f"{white}*") if white else ("*", "")
         ignored = "|".join(regex_iso(*i.__regex__(), "|") for i in self.ignore_list)
         return "+", f"(?:{white}*(?:{ignored}))*{white}*"
 
@@ -153,7 +148,7 @@ class Engine:
         output = ["{"]
         for k, v in self.__dict__.items():
             value = str(v)
-            output.append(indent(quote(k) + ":" + value))
+            output.append(indent(f"{quote(k)}:{value}"))
         output.append("}")
         return "\n".join(output)
 

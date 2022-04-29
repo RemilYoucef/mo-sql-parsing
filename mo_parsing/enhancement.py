@@ -65,10 +65,7 @@ class ParseEnhancement(ParserElement):
 
     def copy(self):
         output = ParserElement.copy(self)
-        if self.engine is engine.CURRENT:
-            output.expr = self.expr
-        else:
-            output.expr = self.expr.copy()
+        output.expr = self.expr if self.engine is engine.CURRENT else self.expr.copy()
         return output
 
     def expecting(self):
@@ -114,9 +111,7 @@ class ParseEnhancement(ParserElement):
             self.expr.checkRecursion(seen + (self,))
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-        return f"{self.__class__.__name__}:({self.expr})"
+        return self.parser_name or f"{self.__class__.__name__}:({self.expr})"
 
 
 class FollowedBy(ParseEnhancement):
@@ -172,10 +167,8 @@ class NotAny(ParseEnhancement):
         return output
 
     def parseImpl(self, string, start, doActions=True):
-        regex = self.regex
-        if regex:
-            found = regex.match(string, start)
-            if found:
+        if regex := self.regex:
+            if found := regex.match(string, start):
                 return ParseResults(self, start, start, [])
             raise ParseException(self, start, string)
         else:
@@ -205,9 +198,7 @@ class NotAny(ParseEnhancement):
         return "*", self.regex.pattern
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-        return "~{" + str(self.expr) + "}"
+        return self.parser_name or "~{" + str(self.expr) + "}"
 
 
 class Many(ParseEnhancement):
@@ -237,9 +228,7 @@ class Many(ParseEnhancement):
         return self
 
     def _min_length(self):
-        if self.parser_config.min_match == 0:
-            return 0
-        return self.expr.min_length()
+        return 0 if self.parser_config.min_match == 0 else self.expr.min_length()
 
     def parseImpl(self, string, start, doActions=True):
         acc = []
@@ -264,9 +253,7 @@ class Many(ParseEnhancement):
                     acc.append(result)
                     count += 1
         except ParseException:
-            if self.parser_config.min_match <= count <= max:
-                pass
-            else:
+            if not self.parser_config.min_match <= count <= max:
                 ParseException(self, start, string, msg="Not correct amount of matches")
         if count:
             if (
@@ -284,16 +271,16 @@ class Many(ParseEnhancement):
                 )
             else:
                 return ParseResults(self, acc[0].start, acc[-1].end, acc)
+        elif self.parser_config.min_match:
+            raise ParseException(
+                self,
+                start,
+                string,
+                msg=f"Expecting at least {self.parser_config.min_match} of {self}",
+            )
+
         else:
-            if not self.parser_config.min_match:
-                return ParseResults(self, start, start, [])
-            else:
-                raise ParseException(
-                    self,
-                    start,
-                    string,
-                    msg=f"Expecting at least {self.parser_config.min_match} of {self}",
-                )
+            return ParseResults(self, start, start, [])
 
     def streamline(self):
         if self.streamlined:
@@ -344,10 +331,7 @@ class Many(ParseEnhancement):
                 + "}"
             )
 
-        if end:
-            return "+", regex + suffix + end
-        else:
-            return "*", regex + suffix
+        return ("+", regex + suffix + end) if end else ("*", regex + suffix)
 
     def __call__(self, name):
         if not name:
@@ -363,9 +347,7 @@ class Many(ParseEnhancement):
         return ParseEnhancement.__call__(self, name)
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-        return f"{self.__class__.__name__}:({self.expr})"
+        return self.parser_name or f"{self.__class__.__name__}:({self.expr})"
 
 
 class OneOrMore(Many):
@@ -386,9 +368,7 @@ class OneOrMore(Many):
         self.engine = self.expr.engine
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-        return "{" + text(self.expr) + "}..."
+        return self.parser_name or "{" + text(self.expr) + "}..."
 
 
 class ZeroOrMore(Many):
@@ -419,10 +399,7 @@ class ZeroOrMore(Many):
             return ParseResults(self, start, start, [])
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-
-        return "[" + text(self.expr) + "]..."
+        return self.parser_name or f"[{text(self.expr)}]..."
 
 
 class Optional(Many):
@@ -448,10 +425,7 @@ class Optional(Many):
             return ParseResults(self, start, start, self.parser_config.defaultValue)
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-
-        return "[" + text(self.expr) + "]"
+        return self.parser_name or f"[{text(self.expr)}]"
 
 
 class SkipTo(ParseEnhancement):
@@ -666,7 +640,7 @@ class Forward(ParserElement):
         # Avoid infinite recursion by setting a temporary strRepr
         self._str = "Forward: ..."
         try:
-            self._str = "Forward: " + text(self.expr)[:1000]
+            self._str = f"Forward: {text(self.expr)[:1000]}"
         except Exception:
             pass
         return self._str
@@ -701,13 +675,12 @@ class Combine(TokenConverter):
 
     def parseImpl(self, string, start, doActions=True):
         result = self.expr.parseImpl(string, start, doActions=doActions)
-        output = ParseResults(
+        return ParseResults(
             self,
             start,
             result.end,
             [result.asString(sep=self.parser_config.separator)],
         )
-        return output
 
     def streamline(self):
         if self.streamlined:
@@ -810,9 +783,7 @@ class Suppress(TokenConverter):
         return self.expr.__regex__()
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-        return text(self.expr)
+        return self.parser_name or text(self.expr)
 
 
 def _suppress_post_parse(tokens, start, string):
@@ -850,12 +821,12 @@ class PrecededBy(ParseEnhancement):
 
         if isinstance(expr, (Literal, Keyword, Char)):
             self.set_config(retreat=expr.min_length(), exact=True)
-        elif isinstance(expr, (Word, CharsNotIn)):
+        elif isinstance(expr, (Word, CharsNotIn)) or not isinstance(
+            expr, _PositionToken
+        ):
             self.set_config(retreat=expr.min_length(), exact=False)
-        elif isinstance(expr, _PositionToken):
-            self.set_config(retreat=0, exact=True)
         else:
-            self.set_config(retreat=expr.min_length(), exact=False)
+            self.set_config(retreat=0, exact=True)
 
     def parseImpl(self, string, start=0, doActions=True):
         if self.parser_config.exact:

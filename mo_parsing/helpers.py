@@ -641,7 +641,7 @@ def withClass(classname, namespace=""):
         1 4 0 1 0
         1,3 2,3 1,1
     """
-    classattr = "%s:class" % namespace if namespace else "class"
+    classattr = f"{namespace}:class" if namespace else "class"
     return withAttribute(**{classattr: classname})
 
 
@@ -711,21 +711,19 @@ def indentedBlock(blockStatementExpr, indent=True):
 
     def indent_stack(t, l, s):
         curCol = col(l, s)
-        if curCol > _indent_stack[-1][0]:
-            PEER << Empty().addParseAction(peer_stack(curCol))
-            DEDENT << Empty().addParseAction(dedent_stack(curCol))
-            _indent_stack.append((curCol, PEER, DEDENT))
-        else:
+        if curCol <= _indent_stack[-1][0]:
             raise ParseException(t.type, l, s, "not a subentry")
+        PEER << Empty().addParseAction(peer_stack(curCol))
+        DEDENT << Empty().addParseAction(dedent_stack(curCol))
+        _indent_stack.append((curCol, PEER, DEDENT))
 
     def nodent_stack(t, l, s):
         curCol = col(l, s)
-        if curCol == _indent_stack[-1][0]:
-            PEER << Empty().addParseAction(peer_stack(curCol))
-            DEDENT << Empty().addParseAction(dedent_stack(curCol))
-            _indent_stack.append((curCol, PEER, DEDENT))
-        else:
+        if curCol != _indent_stack[-1][0]:
             raise ParseException(t.type, s, l, "not a subentry")
+        PEER << Empty().addParseAction(peer_stack(curCol))
+        DEDENT << Empty().addParseAction(dedent_stack(curCol))
+        _indent_stack.append((curCol, PEER, DEDENT))
 
     NL = OneOrMore(LineEnd().suppress())
     INDENT = Empty().addParseAction(indent_stack)
@@ -749,8 +747,9 @@ def indentedBlock(blockStatementExpr, indent=True):
 
 
 anyOpenTag, anyCloseTag = makeHTMLTags(
-    Word(alphas, alphanums + "_:").set_parser_name("any tag")
+    Word(alphas, f"{alphanums}_:").set_parser_name("any tag")
 )
+
 _htmlEntityMap = dict(zip("gt lt amp nbsp quot apos".split(), "><& \"'"))
 commonHTMLEntity = Regex(
     "&(?P<entity>" + "|".join(_htmlEntityMap.keys()) + ");"
@@ -846,25 +845,30 @@ fnumber = (
     .addParseAction(convertToFloat)
 )
 
-identifier = Word(alphas + "_", alphanums + "_").set_parser_name("identifier")
+identifier = Word(f"{alphas}_", f"{alphanums}_").set_parser_name("identifier")
 
 ipv4_address = Regex(
     r"(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(\.(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}"
 ).set_parser_name("IPv4 address")
 
 _ipv6_part = Regex(r"[0-9a-fA-F]{1,4}").set_parser_name("hex_integer")
-_full_ipv6_address = (
-    _ipv6_part + (":" + _ipv6_part) * 7
-).set_parser_name("full IPv6 address")
+_full_ipv6_address = (_ipv6_part + f":{_ipv6_part}" * 7).set_parser_name(
+    "full IPv6 address"
+)
+
 _short_ipv6_address = (
-    Optional(_ipv6_part + (":" + _ipv6_part) * (0, 6))
-    + "::"
-    + Optional(_ipv6_part + (":" + _ipv6_part) * (0, 6))
+    (Optional(_ipv6_part + f":{_ipv6_part}" * (0, 6)) + "::")
+    + Optional(_ipv6_part + f":{_ipv6_part}" * (0, 6))
 ).set_parser_name("short IPv6 address")
-_short_ipv6_address.addCondition(lambda t: sum(
-    1 for tt in t if _ipv6_part.matches(tt)
-) < 8)
-_mixed_ipv6_address = ("::ffff:" + ipv4_address).set_parser_name("mixed IPv6 address")
+
+_short_ipv6_address.addCondition(
+    lambda t: sum(bool(_ipv6_part.matches(tt)) for tt in t) < 8
+)
+
+_mixed_ipv6_address = f"::ffff:{ipv4_address}".set_parser_name(
+    "mixed IPv6 address"
+)
+
 ipv6_address = Combine(
     (
         _full_ipv6_address | _mixed_ipv6_address | _short_ipv6_address

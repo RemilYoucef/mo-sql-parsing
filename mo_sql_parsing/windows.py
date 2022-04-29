@@ -19,22 +19,15 @@ from mo_sql_parsing.utils import *
 
 
 def _to_bound_call(tokens):
-    zero = tokens["zero"]
-    if zero:
+    if zero := tokens["zero"]:
         return {"min": 0, "max": 0}
 
     direction = scrub(tokens["direction"])
     limit = scrub(tokens["limit"])
     if direction == "preceding":
-        if limit == "unbounded":
-            return {"max": 0}
-        else:
-            return {"min": -limit, "max": 0}
+        return {"max": 0} if limit == "unbounded" else {"min": -limit, "max": 0}
     else:  # following
-        if limit == "unbounded":
-            return {"min": 0}
-        else:
-            return {"min": 0, "max": limit}
+        return {"min": 0} if limit == "unbounded" else {"min": 0, "max": limit}
 
 
 def _to_between_call(tokens):

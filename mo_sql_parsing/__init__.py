@@ -28,12 +28,11 @@ def parse(sql):
 def parse_json(sql):
     
     query = sql.lower()
-    
-    try : 
-        query_parsed = {}
-        query_reg = parse(query) 
+
+    try: 
+        query_reg = parse(query)
         alias = get_tables(query_reg,{})[1]
-        query_parsed['tables_from']  =  get_tables_fj(query_reg, {})[0]
+        query_parsed = {'tables_from': get_tables_fj(query_reg, {})[0]}
         query_parsed['tables_join']  =  get_tables_fj(query_reg, {})[1]
         query_parsed['projections']  =  get_projections(query_reg, alias)
         query_parsed['attributes_where']   =  get_atts_where(query_reg, alias)

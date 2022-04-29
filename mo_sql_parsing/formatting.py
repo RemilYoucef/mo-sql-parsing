@@ -83,7 +83,7 @@ def Operator(op):
                 acc.append(sql)
                 continue
             if p >= prec:
-                acc.append("(" + sql + ")")
+                acc.append(f"({sql})")
             else:
                 acc.append(sql)
         return op.join(acc)
@@ -146,13 +146,13 @@ class Formatter:
                 return self.value(json)
             elif "from" in json:
                 # Nested queries
-                return "({})".format(self.format(json))
+                return f"({self.format(json)})"
             elif "select" in json:
                 # Nested queries
-                return "({})".format(self.format(json))
+                return f"({self.format(json)})"
             elif "select_distinct" in json:
                 # Nested queries
-                return "({})".format(self.format(json))
+                return f"({self.format(json)})"
             elif "on" in json:
                 return self._join_on(json)
             elif "null" in json:
@@ -161,7 +161,7 @@ class Formatter:
                 return self.op(json)
         if isinstance(json, string_types):
             return escape(json, self.ansi_quotes, self.should_quote)
-        if json == None:
+        if json is None:
             return "NULL"
 
         return text(json)
@@ -191,9 +191,7 @@ class Formatter:
 
         # treat as regular function call
         if isinstance(value, dict) and len(value) == 0:
-            return (
-                key.upper() + "()"
-            )  # NOT SURE IF AN EMPTY dict SHOULD BE DELT WITH HERE, OR IN self.dispatch()
+            return f"{key.upper()}()"
         else:
             return "{0}({1})".format(key.upper(), self.dispatch(value))
 
@@ -247,12 +245,16 @@ class Formatter:
     def _case(self, checks):
         parts = ["CASE"]
         for check in checks if isinstance(checks, list) else [checks]:
-            if isinstance(check, dict):
-                if "when" in check and "then" in check:
-                    parts.extend(["WHEN", self.dispatch(check["when"])])
-                    parts.extend(["THEN", self.dispatch(check["then"])])
-                else:
-                    parts.extend(["ELSE", self.dispatch(check)])
+            if isinstance(check, dict) and "when" in check and "then" in check:
+                parts.extend(
+                    [
+                        "WHEN",
+                        self.dispatch(check["when"]),
+                        "THEN",
+                        self.dispatch(check["then"]),
+                    ]
+                )
+
             else:
                 parts.extend(["ELSE", self.dispatch(check)])
         parts.append("END")
@@ -288,8 +290,7 @@ class Formatter:
 
         join_keyword = detected_join.pop()
 
-        acc = []
-        acc.append(join_keyword.upper())
+        acc = [join_keyword.upper()]
         acc.append(self.dispatch(json[join_keyword]))
 
         if json.get("on"):
@@ -381,9 +382,8 @@ class Formatter:
             ]))
 
     def limit(self, json):
-        if "limit" in json:
-            if json["limit"]:
-                return "LIMIT {0}".format(self.dispatch(json["limit"]))
+        if "limit" in json and json["limit"]:
+            return "LIMIT {0}".format(self.dispatch(json["limit"]))
 
     def offset(self, json):
         if "offset" in json:
