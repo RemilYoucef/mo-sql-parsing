@@ -165,11 +165,7 @@ class Keyword(Token):
         else:
             ident_chars = "".join(sorted(set(ident_chars)))
 
-        if caseless:
-            pattern = regex_caseless(match)
-        else:
-            pattern = re.escape(match)
-
+        pattern = regex_caseless(match) if caseless else re.escape(match)
         non_word = "($|(?!" + regex_range(ident_chars) + "))"
         self.set_config(
             ident_chars=ident_chars,
@@ -182,8 +178,7 @@ class Keyword(Token):
             self.__class__ = CaselessKeyword
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.parser_config.regex.match(string, start)
-        if found:
+        if found := self.parser_config.regex.match(string, start):
             return ParseResults(self, start, found.end(), [self.parser_config.match])
         raise ParseException(self, start, string)
 
@@ -220,8 +215,7 @@ class CaselessLiteral(Literal):
         self.parser_name = repr(self.parser_config.regex.pattern)
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.parser_config.regex.match(string, start)
-        if found:
+        if found := self.parser_config.regex.match(string, start):
             return ParseResults(self, start, found.end(), [self.parser_config.match],)
         raise ParseException(self, start, string)
 
@@ -336,8 +330,7 @@ class Word(Token):
         return output
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.regex.match(string, start)
-        if found:
+        if found := self.regex.match(string, start):
             return ParseResults(self, start, found.end(), [found.group()])
         else:
             raise ParseException(self, start, string)
@@ -352,9 +345,7 @@ class Word(Token):
         return "+", self.regex.pattern
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-        return f"W:({self.regex.pattern})"
+        return self.parser_name or f"W:({self.regex.pattern})"
 
 
 class Char(Token):
@@ -371,18 +362,13 @@ class Char(Token):
         include = "".join(sorted(include - exclude))
         exclude = "".join(sorted(exclude))
 
-        if not include:
-            regex = regex_range(exclude, exclude=True)
-        else:
-            regex = regex_range(include)
-
+        regex = regex_range(include) if include else regex_range(exclude, exclude=True)
         if asKeyword:
             regex = r"\b%s\b" % self
         self.set_config(regex=regex_compile(regex), include=include, exclude=exclude)
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.parser_config.regex.match(string, start)
-        if found:
+        if found := self.parser_config.regex.match(string, start):
             return ParseResults(self, start, found.end(), [found.group()])
 
         raise ParseException(self, start, string)
@@ -430,9 +416,9 @@ class CharsNotIn(Token):
             max = exact
 
         if len(notChars) == 1:
-            regex = "[^" + regex_range(notChars) + "]"
+            regex = f"[^{regex_range(notChars)}]"
         else:
-            regex = "[^" + regex_range(notChars)[1:]
+            regex = f"[^{regex_range(notChars)[1:]}"
 
         if not max or max == MAX_INT:
             if min == 0:
@@ -455,8 +441,7 @@ class CharsNotIn(Token):
         self.parser_name = text(self)
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.parser_config.regex.match(string, start)
-        if found:
+        if found := self.parser_config.regex.match(string, start):
             return ParseResults(self, start, found.end(), [found.group()])
 
         raise ParseException(self, start, string)
@@ -615,8 +600,7 @@ class LineEnd(_PositionToken):
             self.set_config(lock_engine=e, regex=regex_compile("\\r?(\\n|$)"))
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.parser_config.regex.match(string, start)
-        if found:
+        if found := self.parser_config.regex.match(string, start):
             return ParseResults(self, start, found.end(), ["\n"])
         raise ParseException(self, start, string)
 
@@ -638,10 +622,8 @@ class StringStart(_PositionToken):
         super(StringStart, self).__init__()
 
     def parseImpl(self, string, loc, doActions=True):
-        if loc != 0:
-            # see if entire string up to here is just whitespace and ignoreables
-            if loc != self.engine.skip(string, 0):
-                raise ParseException(self, loc, string)
+        if loc not in [0, self.engine.skip(string, 0)]:
+            raise ParseException(self, loc, string)
         return []
 
 
@@ -689,8 +671,7 @@ class WordStart(_PositionToken):
         self.streamlined = True
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.parser_config.regex.match(string, start)
-        if found:
+        if found := self.parser_config.regex.match(string, start):
             return ParseResults(self, start, start, [])
         raise ParseException(self, start, string)
 
@@ -735,9 +716,14 @@ class WordEnd(_PositionToken):
     def parseImpl(self, string, start, doActions=True):
         word_chars = self.parser_config.word_chars
         instrlen = len(string)
-        if instrlen > 0 and start < instrlen:
-            if string[start] in word_chars or string[start - 1] not in word_chars:
-                raise ParseException(self, start, string)
+        if (
+            instrlen > 0
+            and start < instrlen
+            and (
+                string[start] in word_chars or string[start - 1] not in word_chars
+            )
+        ):
+            raise ParseException(self, start, string)
         return ParseResults(self, start, start, [])
 
     def __regex__(self):

@@ -26,9 +26,7 @@ def attempt(expr, loc, string):
 
 
 def match(expr, start, loc, string, tokens):
-    print(
-        "Matched [" + string[start:loc] + "] (char " + str(start) + " with " + str(expr)
-    )
+    print(f"Matched [{string[start:loc]}] (char {str(start)} with {str(expr)}")
 
 
 if DEBUG:

@@ -20,8 +20,7 @@ Many = expect("Many")
 
 
 def append_config(base, *slots):
-    dups = set(slots) & set(base.Config._fields)
-    if dups:
+    if dups := set(slots) & set(base.Config._fields):
         Log.error("Duplicate config fields: {{dups}}", dups=dups)
 
     fields = base.Config._fields + slots
@@ -88,10 +87,7 @@ def regex_iso(curr_prec, expr, new_prec):
     """
     RETURN NON-CAPTURING GROUP (TO ENSURE ORDER OF OPERATIONS)
     """
-    if _prec[curr_prec] < _prec[new_prec]:
-        return f"(?:{expr})"
-    else:
-        return expr
+    return f"(?:{expr})" if _prec[curr_prec] < _prec[new_prec] else expr
 
 
 def regex_caseless(literal):
@@ -106,8 +102,9 @@ def regex_caseless(literal):
     )
 
 
-_escapes = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
-_escapes.update({c: "\\" + c for c in r".^$*?+-{}[]\|()"})
+_escapes = {"\n": "\\n", "\r": "\\r", "\t": "\\t"} | {
+    c: "\\" + c for c in r".^$*?+-{}[]\|()"
+}
 
 
 def regex_range(s, exclude=False):
@@ -164,7 +161,7 @@ def indent(value, prefix="\t", indent=None):
         return prefix + ("\n" + prefix).join(lines) + suffix
     except Exception as e:
         raise Exception(
-            "Problem with indent of value (" + e.message + ")\n" + text(value)
+            f"Problem with indent of value ({e.message}" + ")\n" + text(value)
         )
 
 
@@ -174,11 +171,7 @@ def quote(value):
     :param value:
     :return:
     """
-    if is_null(value):
-        output = ""
-    else:
-        output = json.dumps(value)
-    return output
+    return "" if is_null(value) else json.dumps(value)
 
 
 def is_number(s):
@@ -208,12 +201,7 @@ def listwrap(value):
 
 
 def coalesce(*args):
-    # pick the first not null value
-    # http://en.wikipedia.org/wiki/Null_coalescing_operator
-    for a in args:
-        if a != None:
-            return a
-    return None
+    return next((a for a in args if a != None), None)
 
 
 # build list of single arg builtins, that can be used as parse actions
@@ -284,9 +272,10 @@ class __config_flags:
     @classmethod
     def _set(cls, dname, value):
         if dname in cls._fixed_names:
-            warnings.warn("{}.{} {} is {} and cannot be overridden".format(
-                cls.__name__, dname, cls._type_desc, str(getattr(cls, dname)).upper(),
-            ))
+            warnings.warn(
+                f"{cls.__name__}.{dname} {cls._type_desc} is {str(getattr(cls, dname)).upper()} and cannot be overridden"
+            )
+
             return
         if dname in cls._all_names:
             setattr(cls, dname, value)
@@ -299,7 +288,7 @@ class __config_flags:
 
 alphas = string.ascii_uppercase + string.ascii_lowercase
 nums = "0123456789"
-hexnums = nums + "ABCDEFabcdef"
+hexnums = f"{nums}ABCDEFabcdef"
 alphanums = alphas + nums
 printables = "".join(c for c in string.printable if c not in string.whitespace)
 
@@ -336,10 +325,7 @@ def line(loc, string):
     """Returns the line of text containing loc within a string, counting newlines as line separators."""
     lastCR = string.rfind("\n", 0, loc)
     nextCR = string.find("\n", loc)
-    if nextCR >= 0:
-        return string[lastCR + 1 : nextCR]
-    else:
-        return string[lastCR + 1 :]
+    return string[lastCR + 1 : nextCR] if nextCR >= 0 else string[lastCR + 1 :]
 
 
 "decorator to trim function calls to match the arity of the target"
@@ -407,7 +393,7 @@ def _xml_escape(data):
 
     # ampersand must be replaced first
     from_symbols = "&><\"'"
-    to_symbols = ("&" + s + ";" for s in "amp gt lt quot apos".split())
+    to_symbols = (f"&{s};" for s in "amp gt lt quot apos".split())
     for from_, to_ in zip(from_symbols, to_symbols):
         data = data.replace(from_, to_)
     return data
@@ -444,7 +430,7 @@ def traceParseAction(f):
         thisFunc = f.__name__
         t, l, s = paArgs[-3:]
         if len(paArgs) > 3:
-            thisFunc = paArgs[0].__class__.__name__ + "." + thisFunc
+            thisFunc = f"{paArgs[0].__class__.__name__}.{thisFunc}"
         sys.stderr.write(
             ">>entering %s(line: '%s', %d, %r)\n" % (thisFunc, line(l, s), l, t)
         )
@@ -511,26 +497,26 @@ class unicode_set(object):
         return [unichr(c) for c in sorted(set(ret))]
 
     @_lazyclassproperty
-    def printables(cls):
+    def printables(self):
         "all non-whitespace characters in this range"
-        return "".join(sorted(filter(
-            lambda c: not c.isspace(), cls._get_chars_for_ranges()
-        )))
+        return "".join(
+            sorted(filter(lambda c: not c.isspace(), self._get_chars_for_ranges()))
+        )
 
     @_lazyclassproperty
-    def alphas(cls):
+    def alphas(self):
         "all alphabetic characters in this range"
-        return "".join(filter(text.isalpha, cls._get_chars_for_ranges()))
+        return "".join(filter(text.isalpha, self._get_chars_for_ranges()))
 
     @_lazyclassproperty
-    def nums(cls):
+    def nums(self):
         "all numeric digit characters in this range"
-        return "".join(filter(text.isdigit, cls._get_chars_for_ranges()))
+        return "".join(filter(text.isdigit, self._get_chars_for_ranges()))
 
     @_lazyclassproperty
-    def alphanums(cls):
+    def alphanums(self):
         "all alphanumeric characters in this range"
-        return cls.alphas + cls.nums
+        return self.alphas + self.nums
 
 
 class parsing_unicode(unicode_set):

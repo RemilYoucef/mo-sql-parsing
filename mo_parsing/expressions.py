@@ -115,14 +115,15 @@ class ParseExpression(ParserElement):
         for e in self.exprs:
             f = e.streamline()
             same = same and f is e
-            if f.is_annotated():
+            if (
+                f.is_annotated()
+                or not f.is_annotated()
+                and not isinstance(f, clazz)
+            ):
                 acc.append(f)
-            elif isinstance(f, clazz):
+            else:
                 same = False
                 acc.extend(f.exprs)
-            else:
-                acc.append(f)
-
         if same:
             return self
 
@@ -132,9 +133,7 @@ class ParseExpression(ParserElement):
         return output
 
     def __call__(self, name):
-        if not name:
-            return self
-        return ParserElement.__call__(self, name)
+        return ParserElement.__call__(self, name) if name else self
 
 
 class And(ParseExpression):
@@ -160,13 +159,12 @@ class And(ParseExpression):
             tmp = []
             for i, expr in enumerate(exprs):
                 if expr is Ellipsis:
-                    if i < len(exprs) - 1:
-                        skipto_arg = (Empty() + exprs[i + 1]).exprs[-1]
-                        tmp.append(SkipTo(skipto_arg)("_skipped"))
-                    else:
+                    if i >= len(exprs) - 1:
                         raise Exception(
                             "cannot construct And with sequence ending in ..."
                         )
+                    skipto_arg = (Empty() + exprs[i + 1]).exprs[-1]
+                    tmp.append(SkipTo(skipto_arg)("_skipped"))
                 else:
                     tmp.append(expr)
             exprs[:] = tmp
@@ -208,14 +206,11 @@ class And(ParseExpression):
                 continue
             f = e.streamline()
             same = same and f is e
-            if f.is_annotated():
+            if f.is_annotated() or not f.is_annotated() and not isinstance(f, And):
                 acc.append(f)
-            elif isinstance(f, And):
+            else:
                 same = False
                 acc.extend(f.exprs)
-            else:
-                acc.append(f)
-
         if same:
             self.streamlined = True
             return self
@@ -282,10 +277,7 @@ class And(ParseExpression):
         return "+", "".join(regex_iso(*e.__regex__(), "+") for e in self.exprs)
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-
-        return "{" + " + ".join(text(e) for e in self.exprs) + "}"
+        return self.parser_name or "{" + " + ".join(text(e) for e in self.exprs) + "}"
 
 
 class Or(ParseExpression):
@@ -415,10 +407,7 @@ class Or(ParseExpression):
         )
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-
-        return "{" + " ^ ".join(text(e) for e in self.exprs) + "}"
+        return self.parser_name or "{" + " ^ ".join(text(e) for e in self.exprs) + "}"
 
 
 class MatchFirst(ParseExpression):
@@ -442,9 +431,8 @@ class MatchFirst(ParseExpression):
     def _min_length(self):
         if self.exprs:
             return min(e.min_length() for e in self.exprs)
-        else:
-            Log.warning("expecting streamline")
-            return 0
+        Log.warning("expecting streamline")
+        return 0
 
     def parseImpl(self, string, start, doActions=True):
         causes = []
@@ -503,10 +491,7 @@ class MatchFirst(ParseExpression):
         )
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-
-        return " | ".join("{" + text(e) + "}" for e in self.exprs)
+        return self.parser_name or " | ".join("{" + text(e) + "}" for e in self.exprs)
 
 
 def faster(exprs):
@@ -613,7 +598,7 @@ class Fast(ParserElement):
             for min_length in [max(_distinct(k, kk) for kk, _ in compact if kk != k)]
         ]
 
-        self.lookup = {k: e for k, e in shorter}
+        self.lookup = dict(shorter)
         self.regex = regex_compile("|".join(regex_caseless(k) for k, _ in shorter))
         self.all_keys = list(sorted(all_keys))
 
@@ -621,30 +606,31 @@ class Fast(ParserElement):
         """
         USE THE LOOKUP FEATURE TO FIND THE FEW ParserElements THAT CAN MATCH
         """
-        found = self.regex.match(string, start)
-        if found:
+        if found := self.regex.match(string, start):
             index = found.group(0).lower()
             return self.lookup[index]
         return []
 
     def parseImpl(self, string, start, doActions=True):
-        found = self.regex.match(string, start)
-        if found:
-            index = found.group(0).lower()
-            exprs = self.lookup[index]
-
-            causes = []
-            for e in exprs:
-                try:
-                    return e._parse(string, start, doActions)
-                except ParseException as cause:
-                    causes.append(cause)
-
-            raise ParseException(self, start, string, cause=causes)
-        else:
+        if not (found := self.regex.match(string, start)):
             raise ParseException(
-                self, start, string, "expecting one of " + json.dumps(self.all_keys)
+                self,
+                start,
+                string,
+                f"expecting one of {json.dumps(self.all_keys)}",
             )
+
+        index = found.group(0).lower()
+        exprs = self.lookup[index]
+
+        causes = []
+        for e in exprs:
+            try:
+                return e._parse(string, start, doActions)
+            except ParseException as cause:
+                causes.append(cause)
+
+        raise ParseException(self, start, string, cause=causes)
 
 
 class MatchAll(ParseExpression):
@@ -674,9 +660,7 @@ class MatchAll(ParseExpression):
         )
 
     def streamline(self):
-        if self.streamlined:
-            return self
-        return super(MatchAll, self).streamline()
+        return self if self.streamlined else super(MatchAll, self).streamline()
 
     def _min_length(self):
         # TODO: MAY BE TOO CONSERVATIVE, WE MAY BE ABLE TO PROVE self CAN CONSUME A CHARACTER
@@ -716,17 +700,17 @@ class MatchAll(ParseExpression):
                     "Missing minimum (%i) more required elements (%s)" % (mi, e),
                 )
 
-        found = set(id(m) for m in matchOrder)
-        missing = [
+        found = {id(m) for m in matchOrder}
+        if missing := [
             e
             for e, mi in zip(self.exprs, self.parser_config.min_match)
             if id(e) not in found and mi > 0
-        ]
-        if missing:
+        ]:
             missing = ", ".join(text(e) for e in missing)
             raise ParseException(
-                string, start, "Missing one or more required elements (%s)" % missing
+                string, start, f"Missing one or more required elements ({missing})"
             )
+
 
         # add any unmatched Optionals, in case they have default values defined
         matchOrder += [e for e in self.exprs if id(e) not in found]
@@ -741,10 +725,7 @@ class MatchAll(ParseExpression):
         return ParseResults(self, results[0].start, results[-1].end, results)
 
     def __str__(self):
-        if self.parser_name:
-            return self.parser_name
-
-        return "{" + " & ".join(text(e) for e in self.exprs) + "}"
+        return self.parser_name or "{" + " & ".join(text(e) for e in self.exprs) + "}"
 
 
 export("mo_parsing.core", And)

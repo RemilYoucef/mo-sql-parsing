@@ -38,10 +38,7 @@ class ParseException(Exception):
 
     @property
     def __cause__(self):
-        if self.causes:
-            return self._causes[0]
-        else:
-            return None
+        return self._causes[0] if self.causes else None
 
     @property
     def loc(self):
@@ -99,10 +96,7 @@ class ParseException(Exception):
             and isinstance(self, item)
         ):
             return True
-        for c in self.causes:
-            if item in c:
-                return True
-        return False
+        return any(item in c for c in self.causes)
 
     def __str__(self):
         causes = indent("".join("\n" + str(c) for c in self.causes))

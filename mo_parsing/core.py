@@ -106,7 +106,7 @@ class ParserElement(object):
     Config = namedtuple("Config", ["callDuringTry", "failAction", "lock_engine"])
 
     def __init__(self):
-        self.parseAction = list()
+        self.parseAction = []
         self.parser_name = ""
         self.token_name = ""
         self.engine = engine.CURRENT
@@ -366,9 +366,7 @@ class ParserElement(object):
         for t, s, e in self._scanString(string):
             out.append(string[end:s])
             if t:
-                if isinstance(t, ParseResults):
-                    out.append("".join(t))
-                elif isinstance(t, list):
+                if isinstance(t, (ParseResults, list)):
                     out.append("".join(t))
                 else:
                     out.append(t)
@@ -397,12 +395,11 @@ class ParserElement(object):
                 for t, s, e in self._scanString(string, maxMatches)
             ]
 
-        if not scanned:
-            return ParseResults(ZeroOrMore(g), -1, 0, [])
-        else:
-            return ParseResults(
-                ZeroOrMore(g), scanned[0].start, scanned[-1].end, scanned
-            )
+        return (
+            ParseResults(ZeroOrMore(g), scanned[0].start, scanned[-1].end, scanned)
+            if scanned
+            else ParseResults(ZeroOrMore(g), -1, 0, [])
+        )
 
     @entrypoint
     def split(self, string, maxsplit=MAX_INT, includeSeparators=False):
@@ -450,8 +447,7 @@ class ParserElement(object):
         def replacer(tokens):
             acc = []
             for s, n in zip(parts, parts[1:]):
-                acc.append(s)
-                acc.append(text(tokens[n]))
+                acc.extend((s, text(tokens[n])))
             acc.append(parts[-1])
             return "".join(acc)
 
@@ -539,8 +535,7 @@ class ParserElement(object):
                 type(other[1]),
             )
 
-        ret = Many(self, min_match=minElements, max_match=maxElements).streamline()
-        return ret
+        return Many(self, min_match=minElements, max_match=maxElements).streamline()
 
     def __rmul__(self, other):
         return self.__mul__(other)
@@ -591,17 +586,13 @@ class ParserElement(object):
         return NotAny(self)
 
     def __getitem__(self, key):
-        if isinstance(key, slice):
-            return self * (key.start, key.stop)
-        return self * key
+        return self * (key.start, key.stop) if isinstance(key, slice) else self * key
 
     def __call__(self, name):
         """
         Shortcut for `.set_token_name`, with ``listAllMatches=False``.
         """
-        if not name:
-            return self
-        return self.set_token_name(name)
+        return self.set_token_name(name) if name else self
 
     def set_token_name(self, name):
         """
@@ -670,7 +661,7 @@ class ParserElement(object):
         return self == other
 
     def __rne__(self, other):
-        return not (self == other)
+        return self != other
 
     def matches(self, testString, parseAll=True):
         """

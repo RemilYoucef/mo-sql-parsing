@@ -19,7 +19,7 @@ from mo_parsing import *
 from mo_parsing import debug
 from mo_parsing.utils import is_number, listwrap, alphanums
 
-IDENT_CHAR = alphanums + "@_$"
+IDENT_CHAR = f"{alphanums}@_$"
 
 
 def scrub(result):
@@ -125,22 +125,15 @@ def to_json_operator(tokens):
             return {"missing": tokens[0]}
         elif tokens[0] == "null":
             return {"missing": tokens[2]}
+    elif op == "is":
+        return {"missing": tokens[0]} if tokens[2] == "null" else {"exists": tokens[0]}
+    elif op == "is_not":
+        return {"exists": tokens[0]} if tokens[2] == "null" else {"missing": tokens[0]}
     elif op == "neq":
         if tokens[2] == "null":
             return {"exists": tokens[0]}
         elif tokens[0] == "null":
             return {"exists": tokens[2]}
-    elif op == "is":
-        if tokens[2] == "null":
-            return {"missing": tokens[0]}
-        else:
-            return {"exists": tokens[0]}
-    elif op == "is_not":
-        if tokens[2] == "null":
-            return {"exists": tokens[0]}
-        else:
-            return {"missing": tokens[0]}
-
     operands = [tokens[0], tokens[2]]
     binary_op = {op: operands}
 
@@ -153,8 +146,7 @@ def to_json_operator(tokens):
                 if isinstance(operand, list):
                     acc.append(operand)
                     continue
-                prefix = operand.get(op)
-                if prefix:
+                if prefix := operand.get(op):
                     acc.extend(prefix)
                     continue
                 else:
@@ -211,11 +203,7 @@ def to_json_call(tokens):
     params = scrub(tokens["params"])
     if not params:
         params = {}
-    if scrub(tokens["ignore_nulls"]):
-        ignore_nulls = True
-    else:
-        ignore_nulls = None
-
+    ignore_nulls = True if scrub(tokens["ignore_nulls"]) else None
     return ParseResults(
         tokens.type,
         tokens.start,
@@ -256,8 +244,7 @@ def to_switch_call(tokens):
     cases = list(tokens["case"])
     for c in cases:
         c["when"] = {"eq": [value, c["when"]]}
-    elze = tokens["else"]
-    if elze:
+    if elze := tokens["else"]:
         cases.append(elze)
     return {"case": cases}
 
@@ -288,10 +275,9 @@ def to_expression_call(tokens):
     if over or within:
         return
 
-    expr = ParseResults(
+    return ParseResults(
         tokens.type, tokens.start, tokens.end, listwrap(tokens["value"])
     )
-    return expr
 
 
 def to_alias(tokens):
@@ -307,8 +293,7 @@ def to_top_clause(tokens):
     if not value:
         return None
     elif tokens["ties"]:
-        output = {}
-        output["ties"] = True
+        output = {"ties": True}
         if tokens["percent"]:
             output["percent"] = value
         else:
@@ -381,8 +366,7 @@ def unquote(tokens):
         val = '"' + val[1:-1].replace("]]", "]").replace('"', '\\"') + '"'
     elif val.startswith("+"):
         val = val[1:]
-    un = ast.literal_eval(val).replace(".", "\\.")
-    return un
+    return ast.literal_eval(val).replace(".", "\\.")
 
 
 def to_string(tokens):
@@ -399,10 +383,7 @@ realNum = (
 )
 
 def parse_int(tokens):
-    if "e" in tokens[0].lower():
-        return int(float(tokens[0]))
-    else:
-        return int(tokens[0])
+    return int(float(tokens[0])) if "e" in tokens[0].lower() else int(tokens[0])
 
 intNum = (
     Regex(r"[+-]?\d+([eE]\+?\d+)?")
